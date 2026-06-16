@@ -776,3 +776,947 @@ public class EmployeeServlet extends HttpServlet {
 | Session | setAttribute/invalidate | none |
 
 Good luck tomorrow! The two most important things to remember: **always create Bean → DAO → Servlet → JSP in that order**, and **don't forget `@MultipartConfig` for Lab 7 file upload** and **`jstl-1.2.jar` in Libraries for Lab 8**.
+
+Let me check the exercises from both labs first.
+
+Looking at the PDFs:
+- **Lab 7 Exercise**: Subject Management System — **NO JSTL, use scriptlets**, tied to session
+- **Lab 8 Exercise**: Car Shop CRUD — **uses JSTL** (same pattern as Employee)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+# LAB EXERCISE
+
+## LAB 7 EXERCISE — Subject Management System
+
+### STEP 1 — SQL
+```sql
+USE lab7_db;
+CREATE TABLE registered_subjects (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    matric_no    VARCHAR(20) NOT NULL,
+    subject_code VARCHAR(20) NOT NULL,
+    subject_name VARCHAR(100) NOT NULL
+);
+```
+
+---
+
+### STEP 2 — `SubjectBean.java`
+📁 `Source Packages > com.lab.bean > SubjectBean.java`
+```java
+package com.lab.bean;
+
+public class SubjectBean implements java.io.Serializable {
+    private int    id;
+    private String matricNo;
+    private String subjectCode;
+    private String subjectName;
+
+    public SubjectBean() {}
+
+    public int    getId()                  { return id; }
+    public void   setId(int id)            { this.id = id; }
+
+    public String getMatricNo()            { return matricNo; }
+    public void   setMatricNo(String m)    { this.matricNo = m; }
+
+    public String getSubjectCode()         { return subjectCode; }
+    public void   setSubjectCode(String c) { this.subjectCode = c; }
+
+    public String getSubjectName()         { return subjectName; }
+    public void   setSubjectName(String n) { this.subjectName = n; }
+}
+```
+
+---
+
+### STEP 3 — `SubjectDAO.java`
+📁 `Source Packages > com.lab.dao > SubjectDAO.java`
+```java
+package com.lab.dao;
+
+import com.lab.bean.SubjectBean;
+import java.sql.*;
+import java.util.*;
+
+public class SubjectDAO {
+
+    private Connection getConnection() throws Exception {
+        Class.forName("com.mysql.cj.jdbc.Driver");
+        return DriverManager.getConnection(
+            "jdbc:mysql://localhost:3306/lab7_db", "root", "");
+    }
+
+    // CREATE — add new subject
+    public boolean addSubject(SubjectBean subject) {
+        try (Connection conn = getConnection()) {
+            String sql = "INSERT INTO registered_subjects " +
+                         "(matric_no, subject_code, subject_name) " +
+                         "VALUES (?, ?, ?)";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, subject.getMatricNo());
+            ps.setString(2, subject.getSubjectCode());
+            ps.setString(3, subject.getSubjectName());
+            return ps.executeUpdate() > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // READ — get all subjects for ONE student only
+    public List<SubjectBean> getSubjectsByMatric(String matricNo) {
+        List<SubjectBean> list = new ArrayList<>();
+        try (Connection conn = getConnection()) {
+            String sql = "SELECT * FROM registered_subjects " +
+                         "WHERE matric_no = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, matricNo);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                SubjectBean s = new SubjectBean();
+                s.setId(rs.getInt("id"));
+                s.setMatricNo(rs.getString("matric_no"));
+                s.setSubjectCode(rs.getString("subject_code"));
+                s.setSubjectName(rs.getString("subject_name"));
+                list.add(s);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    // READ ONE — get single subject by id (for edit form)
+    public SubjectBean getSubjectById(int id) {
+        SubjectBean s = null;
+        try (Connection conn = getConnection()) {
+            String sql = "SELECT * FROM registered_subjects WHERE id = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                s = new SubjectBean();
+                s.setId(rs.getInt("id"));
+                s.setMatricNo(rs.getString("matric_no"));
+                s.setSubjectCode(rs.getString("subject_code"));
+                s.setSubjectName(rs.getString("subject_name"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return s;
+    }
+
+    // UPDATE — edit subject
+    public boolean updateSubject(SubjectBean subject) {
+        try (Connection conn = getConnection()) {
+            String sql = "UPDATE registered_subjects " +
+                         "SET subject_code = ?, subject_name = ? " +
+                         "WHERE id = ? AND matric_no = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, subject.getSubjectCode());
+            ps.setString(2, subject.getSubjectName());
+            ps.setInt(3, subject.getId());
+            ps.setString(4, subject.getMatricNo());
+            return ps.executeUpdate() > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // DELETE — remove subject
+    public boolean deleteSubject(int id, String matricNo) {
+        try (Connection conn = getConnection()) {
+            // matric_no check ensures student can only delete their OWN subject
+            String sql = "DELETE FROM registered_subjects " +
+                         "WHERE id = ? AND matric_no = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, id);
+            ps.setString(2, matricNo);
+            return ps.executeUpdate() > 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+}
+```
+
+---
+
+### STEP 4 — `SubjectServlet.java`
+📁 `Source Packages > com.lab.controller > SubjectServlet.java`
+
+⚠️ When creating: **CHECK "Add to web.xml"**, delete any `@WebServlet` generated
+```java
+package com.lab.controller;
+
+import com.lab.bean.StudentBean;
+import com.lab.bean.SubjectBean;
+import com.lab.dao.SubjectDAO;
+import java.io.IOException;
+import java.util.List;
+import javax.servlet.ServletException;
+import javax.servlet.http.*;
+
+public class SubjectServlet extends HttpServlet {
+
+    private SubjectDAO subjectDAO = new SubjectDAO();
+
+    @Override
+    protected void doGet(HttpServletRequest request,
+                         HttpServletResponse response)
+            throws ServletException, IOException {
+
+        response.setContentType("text/html;charset=UTF-8");
+
+        // SESSION CHECK — get logged in student
+        HttpSession session = request.getSession(false);
+        if (session == null || session.getAttribute("loggedUser") == null) {
+            response.sendRedirect("login.html");
+            return;
+        }
+
+        // Get matric_no from session
+        StudentBean user = (StudentBean) session.getAttribute("loggedUser");
+        String matricNo  = user.getMatricNo();
+
+        String action = request.getParameter("action");
+        if (action == null) action = "view";
+
+        switch (action) {
+
+            case "view":
+                // READ — fetch subjects for this student only
+                List<SubjectBean> list = subjectDAO.getSubjectsByMatric(matricNo);
+                request.setAttribute("subjectList", list);
+                request.getRequestDispatcher("subject/viewSubjects.jsp")
+                       .forward(request, response);
+                break;
+
+            case "add":
+                // Show add form
+                request.getRequestDispatcher("subject/registerSubject.jsp")
+                       .forward(request, response);
+                break;
+
+            case "edit":
+                // Show edit form pre-filled
+                int editId = Integer.parseInt(request.getParameter("id"));
+                SubjectBean toEdit = subjectDAO.getSubjectById(editId);
+                request.setAttribute("subject", toEdit);
+                request.getRequestDispatcher("subject/updateSubject.jsp")
+                       .forward(request, response);
+                break;
+
+            case "delete":
+                // DELETE
+                int delId = Integer.parseInt(request.getParameter("id"));
+                subjectDAO.deleteSubject(delId, matricNo);
+                response.sendRedirect("SubjectServlet?action=view");
+                break;
+
+            default:
+                response.sendRedirect("SubjectServlet?action=view");
+                break;
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest request,
+                          HttpServletResponse response)
+            throws ServletException, IOException {
+
+        response.setContentType("text/html;charset=UTF-8");
+
+        // SESSION CHECK
+        HttpSession session = request.getSession(false);
+        if (session == null || session.getAttribute("loggedUser") == null) {
+            response.sendRedirect("login.html");
+            return;
+        }
+
+        StudentBean user = (StudentBean) session.getAttribute("loggedUser");
+        String matricNo  = user.getMatricNo();
+
+        String action = request.getParameter("action");
+
+        if ("insert".equals(action)) {
+            // CREATE
+            SubjectBean s = new SubjectBean();
+            s.setMatricNo(matricNo);  // from session, not form!
+            s.setSubjectCode(request.getParameter("subjectCode"));
+            s.setSubjectName(request.getParameter("subjectName"));
+            subjectDAO.addSubject(s);
+            response.sendRedirect("SubjectServlet?action=view");
+
+        } else if ("update".equals(action)) {
+            // UPDATE
+            SubjectBean s = new SubjectBean();
+            s.setId(Integer.parseInt(request.getParameter("id")));
+            s.setMatricNo(matricNo);  // from session, not form!
+            s.setSubjectCode(request.getParameter("subjectCode"));
+            s.setSubjectName(request.getParameter("subjectName"));
+            subjectDAO.updateSubject(s);
+            response.sendRedirect("SubjectServlet?action=view");
+        }
+    }
+}
+```
+
+📁 `Web Pages > WEB-INF > web.xml` — add inside `<web-app>`:
+```xml
+<servlet>
+    <servlet-name>SubjectServlet</servlet-name>
+    <servlet-class>com.lab.controller.SubjectServlet</servlet-class>
+</servlet>
+<servlet-mapping>
+    <servlet-name>SubjectServlet</servlet-name>
+    <url-pattern>/SubjectServlet</url-pattern>
+</servlet-mapping>
+```
+
+---
+
+### STEP 5 — Views (SCRIPTLETS — no JSTL!)
+
+📁 `Web Pages > subject > viewSubjects.jsp`
+```jsp
+<%@page contentType="text/html" pageEncoding="UTF-8"%>
+<%@page import="com.lab.bean.SubjectBean"%>
+<%@page import="com.lab.bean.StudentBean"%>
+<%@page import="java.util.List"%>
+<!DOCTYPE html>
+<html>
+<head><title>My Subjects</title></head>
+<body>
+
+<%
+    // Session check
+    StudentBean user = (StudentBean) session.getAttribute("loggedUser");
+    if (user == null) {
+        response.sendRedirect("login.html");
+        return;
+    }
+%>
+
+<h2>Welcome, <%= user.getFullname() %> — Your Subjects</h2>
+<a href="SubjectServlet?action=add">+ Register New Subject</a><br><br>
+
+<table border="1">
+    <tr>
+        <th>ID</th>
+        <th>Subject Code</th>
+        <th>Subject Name</th>
+        <th>Actions</th>
+    </tr>
+
+    <%
+        // Get list from servlet setAttribute
+        List<SubjectBean> list =
+            (List<SubjectBean>) request.getAttribute("subjectList");
+
+        if (list != null && !list.isEmpty()) {
+            for (SubjectBean s : list) {
+    %>
+    <tr>
+        <td><%= s.getId() %></td>
+        <td><%= s.getSubjectCode() %></td>
+        <td><%= s.getSubjectName() %></td>
+        <td>
+            <a href="SubjectServlet?action=edit&id=<%= s.getId() %>">Edit</a>
+            &nbsp;
+            <a href="SubjectServlet?action=delete&id=<%= s.getId() %>"
+               onclick="return confirm('Delete this subject?')">Delete</a>
+        </td>
+    </tr>
+    <%
+            } // end for
+        } else {
+    %>
+    <tr>
+        <td colspan="4">No subjects registered yet.</td>
+    </tr>
+    <%
+        } // end if
+    %>
+</table>
+
+<br>
+<a href="UserServlet?action=logout">Logout</a>
+</body>
+</html>
+```
+
+📁 `Web Pages > subject > registerSubject.jsp`
+```jsp
+<%@page contentType="text/html" pageEncoding="UTF-8"%>
+<%@page import="com.lab.bean.StudentBean"%>
+<!DOCTYPE html>
+<html>
+<head><title>Register Subject</title></head>
+<body>
+
+<%
+    StudentBean user = (StudentBean) session.getAttribute("loggedUser");
+    if (user == null) {
+        response.sendRedirect("login.html");
+        return;
+    }
+%>
+
+<h2>Register New Subject</h2>
+
+<form action="SubjectServlet" method="POST">
+    <input type="hidden" name="action" value="insert">
+
+    Subject Code:
+    <input type="text" name="subjectCode" required><br><br>
+
+    Subject Name:
+    <input type="text" name="subjectName" required><br><br>
+
+    <input type="submit" value="Register Subject">
+</form>
+
+<br>
+<a href="SubjectServlet?action=view">Back to My Subjects</a>
+</body>
+</html>
+```
+
+📁 `Web Pages > subject > updateSubject.jsp`
+```jsp
+<%@page contentType="text/html" pageEncoding="UTF-8"%>
+<%@page import="com.lab.bean.SubjectBean"%>
+<%@page import="com.lab.bean.StudentBean"%>
+<!DOCTYPE html>
+<html>
+<head><title>Update Subject</title></head>
+<body>
+
+<%
+    StudentBean user = (StudentBean) session.getAttribute("loggedUser");
+    if (user == null) {
+        response.sendRedirect("login.html");
+        return;
+    }
+
+    // Get subject passed from servlet
+    SubjectBean s = (SubjectBean) request.getAttribute("subject");
+%>
+
+<h2>Update Subject</h2>
+
+<form action="SubjectServlet" method="POST">
+    <input type="hidden" name="action" value="update">
+    <input type="hidden" name="id"     value="<%= s.getId() %>">
+
+    Subject Code:
+    <input type="text" name="subjectCode"
+           value="<%= s.getSubjectCode() %>" required><br><br>
+
+    Subject Name:
+    <input type="text" name="subjectName"
+           value="<%= s.getSubjectName() %>" required><br><br>
+
+    <input type="submit" value="Update Subject">
+</form>
+
+<br>
+<a href="SubjectServlet?action=view">Back to My Subjects</a>
+</body>
+</html>
+```
+
+---
+
+## LAB 8 EXERCISE — Car Shop CRUD (with JSTL)
+
+### STEP 1 — SQL
+```sql
+CREATE DATABASE IF NOT EXISTS carshop;
+USE carshop;
+CREATE TABLE IF NOT EXISTS CarPricelist (
+    Car_id   INT NOT NULL AUTO_INCREMENT,
+    Brand    VARCHAR(15),
+    Model    VARCHAR(30),
+    Cyclinder INT,
+    Price    DOUBLE,
+    PRIMARY KEY (Car_id)
+);
+```
+
+---
+
+### STEP 2 — NetBeans Project Setup
+```
+New Project → Java Web → Web Application
+Name: CarShop
+Server: Apache Tomcat
+→ Add Libraries: mysql-connector-j.jar AND jstl-1.2.jar
+```
+
+---
+
+### STEP 3 — `Car.java`
+📁 `Source Packages > com.Model > Car.java`
+```java
+package com.Model;
+
+public class Car {
+    private int    carId;
+    private String brand;
+    private String model;
+    private int    cyclinder;
+    private double price;
+
+    public Car() {}
+
+    // Constructor WITHOUT id — for INSERT
+    public Car(String brand, String model, int cyclinder, double price) {
+        this.brand     = brand;
+        this.model     = model;
+        this.cyclinder = cyclinder;
+        this.price     = price;
+    }
+
+    // Constructor WITH id — for UPDATE/display
+    public Car(int carId, String brand, String model,
+               int cyclinder, double price) {
+        this.carId     = carId;
+        this.brand     = brand;
+        this.model     = model;
+        this.cyclinder = cyclinder;
+        this.price     = price;
+    }
+
+    public int    getCarId()              { return carId; }
+    public void   setCarId(int carId)     { this.carId = carId; }
+
+    public String getBrand()              { return brand; }
+    public void   setBrand(String brand)  { this.brand = brand; }
+
+    public String getModel()              { return model; }
+    public void   setModel(String model)  { this.model = model; }
+
+    public int    getCyclinder()              { return cyclinder; }
+    public void   setCyclinder(int cyclinder) { this.cyclinder = cyclinder; }
+
+    public double getPrice()               { return price; }
+    public void   setPrice(double price)   { this.price = price; }
+}
+```
+
+---
+
+### STEP 4 — `CarDAO.java`
+📁 `Source Packages > com.DAO > CarDAO.java`
+```java
+package com.DAO;
+
+import com.Model.Car;
+import java.sql.*;
+import java.util.*;
+
+public class CarDAO {
+
+    private String jdbcURL      = "jdbc:mysql://localhost:3306/carshop";
+    private String jdbcUsername = "root";
+    private String jdbcPassword = "admin"; // change to your password
+
+    private static final String INSERT_SQL =
+        "INSERT INTO CarPricelist (Brand, Model, Cyclinder, Price) " +
+        "VALUES (?, ?, ?, ?)";
+    private static final String SELECT_ALL =
+        "SELECT * FROM CarPricelist";
+    private static final String SELECT_BY_ID =
+        "SELECT * FROM CarPricelist WHERE Car_id = ?";
+    private static final String UPDATE_SQL =
+        "UPDATE CarPricelist SET Brand=?, Model=?, Cyclinder=?, Price=? " +
+        "WHERE Car_id=?";
+    private static final String DELETE_SQL =
+        "DELETE FROM CarPricelist WHERE Car_id=?";
+
+    protected Connection getConnection() {
+        Connection conn = null;
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            conn = DriverManager.getConnection(
+                       jdbcURL, jdbcUsername, jdbcPassword);
+        } catch (Exception e) { e.printStackTrace(); }
+        return conn;
+    }
+
+    // CREATE
+    public void insertCar(Car car) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(INSERT_SQL)) {
+            ps.setString(1, car.getBrand());
+            ps.setString(2, car.getModel());
+            ps.setInt(3,    car.getCyclinder());
+            ps.setDouble(4, car.getPrice());
+            ps.executeUpdate();
+        }
+    }
+
+    // READ all
+    public List<Car> selectAllCars() {
+        List<Car> list = new ArrayList<>();
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(SELECT_ALL)) {
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(new Car(
+                    rs.getInt("Car_id"),
+                    rs.getString("Brand"),
+                    rs.getString("Model"),
+                    rs.getInt("Cyclinder"),
+                    rs.getDouble("Price")));
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return list;
+    }
+
+    // READ one
+    public Car selectCarById(int id) {
+        Car car = null;
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(SELECT_BY_ID)) {
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                car = new Car(
+                    rs.getInt("Car_id"),
+                    rs.getString("Brand"),
+                    rs.getString("Model"),
+                    rs.getInt("Cyclinder"),
+                    rs.getDouble("Price"));
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return car;
+    }
+
+    // UPDATE
+    public boolean updateCar(Car car) throws SQLException {
+        boolean updated;
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(UPDATE_SQL)) {
+            ps.setString(1, car.getBrand());
+            ps.setString(2, car.getModel());
+            ps.setInt(3,    car.getCyclinder());
+            ps.setDouble(4, car.getPrice());
+            ps.setInt(5,    car.getCarId());
+            updated = ps.executeUpdate() > 0;
+        }
+        return updated;
+    }
+
+    // DELETE
+    public boolean deleteCar(int id) throws SQLException {
+        boolean deleted;
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
+            ps.setInt(1, id);
+            deleted = ps.executeUpdate() > 0;
+        }
+        return deleted;
+    }
+}
+```
+
+---
+
+### STEP 5 — `CarServlet.java`
+📁 `Source Packages > com.WEB > CarServlet.java`
+```java
+package com.WEB;
+
+import com.DAO.CarDAO;
+import com.Model.Car;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+import javax.servlet.*;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.*;
+
+@WebServlet("/")
+public class CarServlet extends HttpServlet {
+
+    private CarDAO carDAO;
+
+    @Override
+    public void init() {
+        carDAO = new CarDAO();
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+        doGet(req, res);
+    }
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+
+        String action = req.getServletPath();
+
+        try {
+            switch (action) {
+                case "/new":    showNewForm(req, res);  break;
+                case "/insert": insertCar(req, res);    break;
+                case "/edit":   showEditForm(req, res); break;
+                case "/update": updateCar(req, res);    break;
+                case "/delete": deleteCar(req, res);    break;
+                default:        listCars(req, res);     break;
+            }
+        } catch (SQLException ex) {
+            throw new ServletException(ex);
+        }
+    }
+
+    // List all cars — default
+    private void listCars(HttpServletRequest req, HttpServletResponse res)
+            throws SQLException, IOException, ServletException {
+        List<Car> list = carDAO.selectAllCars();
+        req.setAttribute("carList", list);
+        req.getRequestDispatcher("carList.jsp").forward(req, res);
+    }
+
+    // Show blank add form
+    private void showNewForm(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+        req.getRequestDispatcher("carForm.jsp").forward(req, res);
+    }
+
+    // Show edit form pre-filled
+    private void showEditForm(HttpServletRequest req, HttpServletResponse res)
+            throws SQLException, ServletException, IOException {
+        int id = Integer.parseInt(req.getParameter("id"));
+        Car car = carDAO.selectCarById(id);
+        req.setAttribute("car", car);
+        req.getRequestDispatcher("carForm.jsp").forward(req, res);
+    }
+
+    // INSERT
+    private void insertCar(HttpServletRequest req, HttpServletResponse res)
+            throws SQLException, IOException {
+        Car car = new Car(
+            req.getParameter("brand"),
+            req.getParameter("model"),
+            Integer.parseInt(req.getParameter("cyclinder")),
+            Double.parseDouble(req.getParameter("price")));
+        carDAO.insertCar(car);
+        res.sendRedirect("list");
+    }
+
+    // UPDATE
+    private void updateCar(HttpServletRequest req, HttpServletResponse res)
+            throws SQLException, IOException {
+        Car car = new Car(
+            Integer.parseInt(req.getParameter("carId")),
+            req.getParameter("brand"),
+            req.getParameter("model"),
+            Integer.parseInt(req.getParameter("cyclinder")),
+            Double.parseDouble(req.getParameter("price")));
+        carDAO.updateCar(car);
+        res.sendRedirect("list");
+    }
+
+    // DELETE
+    private void deleteCar(HttpServletRequest req, HttpServletResponse res)
+            throws SQLException, IOException {
+        int id = Integer.parseInt(req.getParameter("id"));
+        carDAO.deleteCar(id);
+        res.sendRedirect("list");
+    }
+}
+```
+
+---
+
+### STEP 6 — web.xml static fix
+📁 `Web Pages > WEB-INF > web.xml`
+```xml
+<servlet-mapping>
+    <servlet-name>default</servlet-name>
+    <url-pattern>*.css</url-pattern>
+</servlet-mapping>
+<servlet-mapping>
+    <servlet-name>default</servlet-name>
+    <url-pattern>*.js</url-pattern>
+</servlet-mapping>
+<servlet-mapping>
+    <servlet-name>default</servlet-name>
+    <url-pattern>*.png</url-pattern>
+</servlet-mapping>
+```
+
+---
+
+### STEP 7 — Views (JSTL)
+
+📁 `Web Pages > index.jsp`
+```jsp
+<%@page contentType="text/html" pageEncoding="UTF-8"%>
+<!DOCTYPE html>
+<html>
+<head><title>Car Shop</title></head>
+<body>
+<h1>Car Shop Management System</h1>
+<ul>
+    <li><a href="list">View All Cars</a></li>
+    <li><a href="new">Add New Car</a></li>
+</ul>
+</body>
+</html>
+```
+
+📁 `Web Pages > carList.jsp`
+```jsp
+<%@ page language="java" contentType="text/html; charset=UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c"%>
+<!DOCTYPE html>
+<html>
+<head><title>Car Price List</title></head>
+<body>
+
+<h2>Car Price List</h2>
+<a href="new">+ Add New Car</a><br><br>
+
+<table border="1">
+    <tr>
+        <th>ID</th>
+        <th>Brand</th>
+        <th>Model</th>
+        <th>Cyclinder</th>
+        <th>Price (RM)</th>
+        <th>Actions</th>
+    </tr>
+
+    <c:forEach var="car" items="${carList}">
+        <tr>
+            <td><c:out value="${car.carId}"/></td>
+            <td><c:out value="${car.brand}"/></td>
+            <td><c:out value="${car.model}"/></td>
+            <td><c:out value="${car.cyclinder}"/></td>
+            <td><c:out value="${car.price}"/></td>
+            <td>
+                <a href="edit?id=<c:out value='${car.carId}'/>">Edit</a>
+                &nbsp;
+                <a href="delete?id=<c:out value='${car.carId}'/>"
+                   onclick="return confirm('Delete this car?')">Delete</a>
+            </td>
+        </tr>
+    </c:forEach>
+</table>
+
+</body>
+</html>
+```
+
+📁 `Web Pages > carForm.jsp`
+```jsp
+<%@ page language="java" contentType="text/html; charset=UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c"%>
+<!DOCTYPE html>
+<html>
+<head><title>Car Form</title></head>
+<body>
+
+<%-- Switch between ADD and EDIT mode --%>
+<c:if test="${car != null}">
+    <h2>Edit Car</h2>
+    <form action="update" method="post">
+    <input type="hidden" name="carId"
+           value="<c:out value='${car.carId}'/>">
+</c:if>
+<c:if test="${car == null}">
+    <h2>Add New Car</h2>
+    <form action="insert" method="post">
+</c:if>
+
+    Brand:
+    <input type="text" name="brand"
+           value="<c:out value='${car.brand}'/>" required><br><br>
+
+    Model:
+    <input type="text" name="model"
+           value="<c:out value='${car.model}'/>" required><br><br>
+
+    Cyclinder:
+    <input type="number" name="cyclinder"
+           value="<c:out value='${car.cyclinder}'/>" required><br><br>
+
+    Price (RM):
+    <input type="number" step="0.01" name="price"
+           value="<c:out value='${car.price}'/>" required><br><br>
+
+    <input type="submit" value="Save">
+</form>
+
+<br>
+<a href="list">Back to List</a>
+</body>
+</html>
+```
+
+---
+
+## Final File Structure Summary
+
+```
+LAB 7 PROJECT
+├── Source Packages
+│   ├── com.lab.bean
+│   │   ├── StudentBean.java      (from main lab)
+│   │   └── SubjectBean.java      (exercise)
+│   ├── com.lab.dao
+│   │   ├── StudentDAO.java       (from main lab)
+│   │   └── SubjectDAO.java       (exercise)
+│   └── com.lab.controller
+│       ├── UserServlet.java      (from main lab)
+│       └── SubjectServlet.java   (exercise)
+└── Web Pages
+    ├── register.html             (from main lab)
+    ├── login.html                (from main lab)
+    ├── dashboard.jsp             (from main lab)
+    ├── WEB-INF/web.xml           (both servlets mapped here)
+    └── subject/
+        ├── viewSubjects.jsp      (exercise — scriptlets)
+        ├── registerSubject.jsp   (exercise — scriptlets)
+        └── updateSubject.jsp     (exercise — scriptlets)
+
+LAB 8 PROJECT
+├── Source Packages
+│   ├── com.Model
+│   │   └── Car.java
+│   ├── com.DAO
+│   │   └── CarDAO.java
+│   └── com.WEB
+│       └── CarServlet.java
+└── Web Pages
+    ├── index.jsp
+    ├── carList.jsp               (JSTL c:forEach)
+    ├── carForm.jsp               (JSTL c:if for add/edit)
+    └── WEB-INF/web.xml           (static file fix)
+```
+
+---
+
+## Key Differences to Remember
+
+| | Lab 7 Exercise | Lab 8 Exercise |
+|---|---|---|
+| JSP style | **Scriptlets** `<% %>` | **JSTL** `<c:forEach>` |
+| Routing | `action` param in URL | `getServletPath()` |
+| Servlet mapping | **web.xml** (no annotation) | **@WebServlet("/")** |
+| Session | Must get `matricNo` from session | No session needed |
+| DB filter | `WHERE matric_no = ?` | No filter, show all |
+
+Good luck tomorrow!
