@@ -2300,3 +2300,629 @@ LAB 8 PROJECT
 | DB filter | `WHERE matric_no = ?` | No filter, show all |
 
 Good luck tomorrow!
+Here's a template you can reuse for ANY MVC CRUD question. I'll show you exactly what to change.
+
+---
+
+## What to Change Checklist
+
+```
+When you get a new question, change these things:
+
+1. DATABASE NAME   → carshop, bookstore, clinic etc
+2. TABLE NAME      → CarPricelist, books, patients etc
+3. CLASS NAME      → Car, Book, Patient etc
+4. PACKAGE NAMES   → com.Model, com.DAO, com.WEB (can keep same)
+5. VARIABLES       → match the table columns
+6. SERVLET NAME    → CarServlet, BookServlet etc
+7. JSP NAMES       → carList.jsp, bookList.jsp etc
+8. ATTRIBUTE NAMES → "carList", "bookList" etc (setAttribute)
+```
+
+---
+
+## TEMPLATE — SQL
+
+```sql
+-- CHANGE: database name, table name, columns to match question
+CREATE DATABASE IF NOT EXISTS YOUR_DB_NAME;
+USE YOUR_DB_NAME;
+
+CREATE TABLE IF NOT EXISTS YOUR_TABLE_NAME (
+    id        INT NOT NULL AUTO_INCREMENT,
+    column1   VARCHAR(50),   -- change to match question
+    column2   VARCHAR(50),   -- change to match question
+    column3   INT,           -- change type to match (INT, DOUBLE, VARCHAR)
+    column4   DOUBLE,        -- add/remove columns as needed
+    PRIMARY KEY (id)
+);
+```
+
+**Car Shop example:**
+```sql
+CREATE DATABASE IF NOT EXISTS carshop;
+USE carshop;
+CREATE TABLE IF NOT EXISTS CarPricelist (
+    Car_id    INT NOT NULL AUTO_INCREMENT,
+    Brand     VARCHAR(15),
+    Model     VARCHAR(30),
+    Cyclinder INT,
+    Price     DOUBLE,
+    PRIMARY KEY (Car_id)
+);
+```
+
+---
+
+## TEMPLATE — Bean (Model)
+
+```java
+package com.Model;
+
+// CHANGE: class name to match your entity e.g. Car, Book, Patient
+public class YourEntity {
+
+    // CHANGE: variables to match your table columns
+    private int    id;       // always need this
+    private String field1;   // match column type: String, int, double
+    private String field2;
+    private int    field3;
+    private double field4;
+
+    // Empty constructor — always keep this
+    public YourEntity() {}
+
+    // Constructor WITHOUT id — used for INSERT
+    // CHANGE: parameters to match your fields
+    public YourEntity(String field1, String field2,
+                      int field3, double field4) {
+        this.field1 = field1;
+        this.field2 = field2;
+        this.field3 = field3;
+        this.field4 = field4;
+    }
+
+    // Constructor WITH id — used for UPDATE and display
+    // CHANGE: parameters to match your fields
+    public YourEntity(int id, String field1, String field2,
+                      int field3, double field4) {
+        this.id     = id;
+        this.field1 = field1;
+        this.field2 = field2;
+        this.field3 = field3;
+        this.field4 = field4;
+    }
+
+    // Getters and Setters — CHANGE names to match fields
+    public int    getId()                { return id; }
+    public void   setId(int id)          { this.id = id; }
+
+    public String getField1()            { return field1; }
+    public void   setField1(String f)    { this.field1 = f; }
+
+    public String getField2()            { return field2; }
+    public void   setField2(String f)    { this.field2 = f; }
+
+    public int    getField3()            { return field3; }
+    public void   setField3(int f)       { this.field3 = f; }
+
+    public double getField4()            { return field4; }
+    public void   setField4(double f)    { this.field4 = f; }
+}
+```
+
+**Car Shop example:**
+```java
+package com.Model;
+
+public class Car {
+
+    private int    carId;
+    private String brand;
+    private String model;
+    private int    cyclinder;
+    private double price;
+
+    public Car() {}
+
+    // INSERT — no id
+    public Car(String brand, String model, int cyclinder, double price) {
+        this.brand     = brand;
+        this.model     = model;
+        this.cyclinder = cyclinder;
+        this.price     = price;
+    }
+
+    // UPDATE/display — with id
+    public Car(int carId, String brand, String model,
+               int cyclinder, double price) {
+        this.carId     = carId;
+        this.brand     = brand;
+        this.model     = model;
+        this.cyclinder = cyclinder;
+        this.price     = price;
+    }
+
+    public int    getCarId()                  { return carId; }
+    public void   setCarId(int carId)         { this.carId = carId; }
+
+    public String getBrand()                  { return brand; }
+    public void   setBrand(String brand)      { this.brand = brand; }
+
+    public String getModel()                  { return model; }
+    public void   setModel(String model)      { this.model = model; }
+
+    public int    getCyclinder()              { return cyclinder; }
+    public void   setCyclinder(int cyclinder) { this.cyclinder = cyclinder; }
+
+    public double getPrice()                  { return price; }
+    public void   setPrice(double price)      { this.price = price; }
+}
+```
+
+---
+
+## TEMPLATE — DAO
+
+```java
+package com.DAO;
+
+// CHANGE: import your entity class
+import com.Model.YourEntity;
+import java.sql.*;
+import java.util.*;
+
+// CHANGE: class name
+public class YourEntityDAO {
+
+    // CHANGE: database name in URL + password
+    private String jdbcURL      = "jdbc:mysql://localhost:3306/YOUR_DB_NAME";
+    private String jdbcUsername = "root";
+    private String jdbcPassword = "";
+
+    // CHANGE: table name and column names in all SQL below
+    private static final String INSERT_SQL =
+        "INSERT INTO YOUR_TABLE (col1, col2, col3, col4) " +
+        "VALUES (?, ?, ?, ?)";
+
+    private static final String SELECT_ALL =
+        "SELECT * FROM YOUR_TABLE";
+
+    private static final String SELECT_BY_ID =
+        "SELECT * FROM YOUR_TABLE WHERE id = ?";
+
+    private static final String UPDATE_SQL =
+        "UPDATE YOUR_TABLE " +
+        "SET col1=?, col2=?, col3=?, col4=? " +
+        "WHERE id=?";
+
+    private static final String DELETE_SQL =
+        "DELETE FROM YOUR_TABLE WHERE id=?";
+
+    // NEVER CHANGE THIS — just update driver class name if needed
+    protected Connection getConnection() {
+        Connection conn = null;
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            conn = DriverManager.getConnection(
+                       jdbcURL, jdbcUsername, jdbcPassword);
+        } catch (Exception e) { e.printStackTrace(); }
+        return conn;
+    }
+
+    // CREATE — CHANGE: setter names to match your entity
+    public void insertEntity(YourEntity entity) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(INSERT_SQL)) {
+
+            // CHANGE: match ? positions to your INSERT_SQL columns
+            ps.setString(1, entity.getField1());
+            ps.setString(2, entity.getField2());
+            ps.setInt(3,    entity.getField3());
+            ps.setDouble(4, entity.getField4());
+            ps.executeUpdate();
+
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    // READ ALL — CHANGE: entity class name, getter names
+    public List<YourEntity> selectAll() {
+        List<YourEntity> list = new ArrayList<>();
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(SELECT_ALL)) {
+
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                // CHANGE: column names to match your table
+                list.add(new YourEntity(
+                    rs.getInt("id"),
+                    rs.getString("col1"),
+                    rs.getString("col2"),
+                    rs.getInt("col3"),
+                    rs.getDouble("col4")));
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return list;
+    }
+
+    // READ ONE — CHANGE: entity class name, column names
+    public YourEntity selectById(int id) {
+        YourEntity entity = null;
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(SELECT_BY_ID)) {
+
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                entity = new YourEntity(
+                    rs.getInt("id"),
+                    rs.getString("col1"),
+                    rs.getString("col2"),
+                    rs.getInt("col3"),
+                    rs.getDouble("col4"));
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return entity;
+    }
+
+    // UPDATE — CHANGE: setter names, match ? positions to UPDATE_SQL
+    public boolean updateEntity(YourEntity entity) throws SQLException {
+        boolean updated;
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(UPDATE_SQL)) {
+
+            ps.setString(1, entity.getField1());
+            ps.setString(2, entity.getField2());
+            ps.setInt(3,    entity.getField3());
+            ps.setDouble(4, entity.getField4());
+            ps.setInt(5,    entity.getId()); // WHERE id — always last
+            updated = ps.executeUpdate() > 0;
+        }
+        return updated;
+    }
+
+    // DELETE — NEVER CHANGE THIS, just the method name
+    public boolean deleteEntity(int id) throws SQLException {
+        boolean deleted;
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(DELETE_SQL)) {
+
+            ps.setInt(1, id);
+            deleted = ps.executeUpdate() > 0;
+        }
+        return deleted;
+    }
+}
+```
+
+---
+
+## TEMPLATE — Servlet
+
+```java
+package com.WEB;
+
+// CHANGE: import your DAO and Entity
+import com.DAO.YourEntityDAO;
+import com.Model.YourEntity;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+import javax.servlet.*;
+import javax.servlet.http.*;
+
+// NO @WebServlet — using web.xml instead
+// CHANGE: class name
+public class YourEntityServlet extends HttpServlet {
+
+    // CHANGE: DAO type and name
+    private YourEntityDAO dao;
+
+    @Override
+    public void init() {
+        dao = new YourEntityDAO(); // CHANGE: DAO class name
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest request,
+                          HttpServletResponse response)
+            throws ServletException, IOException {
+        doGet(request, response); // NEVER CHANGE THIS
+    }
+
+    @Override
+    protected void doGet(HttpServletRequest request,
+                         HttpServletResponse response)
+            throws ServletException, IOException {
+
+        String action = request.getServletPath(); // NEVER CHANGE THIS
+
+        try {
+            switch (action) {
+                // NEVER CHANGE these case names
+                case "/new":    showNewForm(request, response);  break;
+                case "/insert": insertEntity(request, response); break;
+                case "/edit":   showEditForm(request, response); break;
+                case "/update": updateEntity(request, response); break;
+                case "/delete": deleteEntity(request, response); break;
+                default:        listEntity(request, response);   break;
+            }
+        } catch (SQLException ex) {
+            throw new ServletException(ex);
+        }
+    }
+
+    // READ ALL
+    // CHANGE: "entityList" attribute name, "entityList.jsp" JSP name
+    private void listEntity(HttpServletRequest request,
+                             HttpServletResponse response)
+            throws SQLException, IOException, ServletException {
+
+        List<YourEntity> list = dao.selectAll();
+        request.setAttribute("entityList", list); // CHANGE attribute name
+        request.getRequestDispatcher("entityList.jsp") // CHANGE jsp name
+               .forward(request, response);
+    }
+
+    // SHOW ADD FORM
+    // CHANGE: "entityForm.jsp" JSP name
+    private void showNewForm(HttpServletRequest request,
+                              HttpServletResponse response)
+            throws ServletException, IOException {
+
+        request.getRequestDispatcher("entityForm.jsp") // CHANGE jsp name
+               .forward(request, response);
+    }
+
+    // SHOW EDIT FORM
+    // CHANGE: "entity" attribute name, selectById method, JSP name
+    private void showEditForm(HttpServletRequest request,
+                               HttpServletResponse response)
+            throws SQLException, ServletException, IOException {
+
+        int id = Integer.parseInt(request.getParameter("id"));
+        YourEntity entity = dao.selectById(id);
+        request.setAttribute("entity", entity); // CHANGE attribute name
+        request.getRequestDispatcher("entityForm.jsp") // CHANGE jsp name
+               .forward(request, response);
+    }
+
+    // INSERT
+    // CHANGE: getParameter names to match your form fields
+    private void insertEntity(HttpServletRequest request,
+                               HttpServletResponse response)
+            throws SQLException, IOException {
+
+        // CHANGE: parameter names match your HTML form input names
+        YourEntity entity = new YourEntity(
+            request.getParameter("field1"),
+            request.getParameter("field2"),
+            Integer.parseInt(request.getParameter("field3")),
+            Double.parseDouble(request.getParameter("field4")));
+
+        dao.insertEntity(entity);
+        response.sendRedirect("list"); // NEVER CHANGE
+    }
+
+    // UPDATE
+    // CHANGE: getParameter names to match your form fields
+    private void updateEntity(HttpServletRequest request,
+                               HttpServletResponse response)
+            throws SQLException, IOException {
+
+        YourEntity entity = new YourEntity(
+            Integer.parseInt(request.getParameter("id")), // hidden field
+            request.getParameter("field1"),
+            request.getParameter("field2"),
+            Integer.parseInt(request.getParameter("field3")),
+            Double.parseDouble(request.getParameter("field4")));
+
+        dao.updateEntity(entity);
+        response.sendRedirect("list"); // NEVER CHANGE
+    }
+
+    // DELETE — NEVER CHANGE THIS
+    private void deleteEntity(HttpServletRequest request,
+                               HttpServletResponse response)
+            throws SQLException, IOException {
+
+        int id = Integer.parseInt(request.getParameter("id"));
+        dao.deleteEntity(id);
+        response.sendRedirect("list"); // NEVER CHANGE
+    }
+}
+```
+
+---
+
+## TEMPLATE — `web.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app>
+
+    <!-- CHANGE: servlet-name and servlet-class to match yours -->
+    <servlet>
+        <servlet-name>YourEntityServlet</servlet-name>
+        <servlet-class>com.WEB.YourEntityServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>YourEntityServlet</servlet-name>
+        <url-pattern>/</url-pattern> <!-- NEVER CHANGE -->
+    </servlet-mapping>
+
+    <!-- NEVER CHANGE THESE 3 — fixes static files -->
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>*.css</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>*.js</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>*.png</url-pattern>
+    </servlet-mapping>
+
+</web-app>
+```
+
+---
+
+## TEMPLATE — `entityList.jsp`
+
+```jsp
+<%@ page language="java" contentType="text/html; charset=UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c"%>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YOUR TITLE</title><!-- CHANGE -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-md navbar-dark" style="background-color: tomato">
+    <a href="" class="navbar-brand">YOUR APP NAME</a><!-- CHANGE -->
+    <ul class="navbar-nav">
+        <li><a href="<%=request.getContextPath()%>/list" class="nav-link">
+            YOUR ENTITY<!-- CHANGE e.g. Cars, Books -->
+        </a></li>
+    </ul>
+</nav>
+
+<br>
+<div class="container">
+    <h3 class="text-center">List of YOUR ENTITY</h3><!-- CHANGE -->
+    <hr>
+    <a href="<%=request.getContextPath()%>/new" class="btn btn-success">
+        Add New YOUR ENTITY <!-- CHANGE -->
+    </a>
+    <br><br>
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Field 1</th>  <!-- CHANGE to your column names -->
+                <th>Field 2</th>
+                <th>Field 3</th>
+                <th>Field 4</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <%-- CHANGE: "entityList" and "entity" to match setAttribute name --%>
+            <c:forEach var="entity" items="${entityList}">
+                <tr>
+                    <td><c:out value="${entity.id}"/></td>
+                    <%-- CHANGE: getter names e.g. entity.brand, entity.model --%>
+                    <td><c:out value="${entity.field1}"/></td>
+                    <td><c:out value="${entity.field2}"/></td>
+                    <td><c:out value="${entity.field3}"/></td>
+                    <td><c:out value="${entity.field4}"/></td>
+                    <td>
+                        <a href="edit?id=<c:out value='${entity.id}'/>"
+                           class="btn btn-primary btn-sm">Edit</a>
+                        &nbsp;
+                        <a href="delete?id=<c:out value='${entity.id}'/>"
+                           class="btn btn-danger btn-sm"
+                           onclick="return confirm('Delete this?')">Delete</a>
+                    </td>
+                </tr>
+            </c:forEach>
+        </tbody>
+    </table>
+</div>
+
+</body>
+</html>
+```
+
+---
+
+## TEMPLATE — `entityForm.jsp`
+
+```jsp
+<%@ page language="java" contentType="text/html; charset=UTF-8"%>
+<%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c"%>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YOUR TITLE</title><!-- CHANGE -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-md navbar-dark" style="background-color: tomato">
+    <a href="" class="navbar-brand">YOUR APP NAME</a><!-- CHANGE -->
+</nav>
+
+<br>
+<div class="container col-md-5">
+<div class="card">
+<div class="card-body">
+
+    <%-- CHANGE "entity" to match your setAttribute name --%>
+    <c:if test="${entity != null}">
+        <form action="update" method="post">
+        <input type="hidden" name="id" value="<c:out value='${entity.id}'/>">
+    </c:if>
+    <c:if test="${entity == null}">
+        <form action="insert" method="post">
+    </c:if>
+
+        <h2>
+            <c:if test="${entity != null}">Edit YOUR ENTITY</c:if><!-- CHANGE -->
+            <c:if test="${entity == null}">Add New YOUR ENTITY</c:if><!-- CHANGE -->
+        </h2>
+
+        <!-- CHANGE: label, input name, and ${entity.field1} for each field -->
+        <div class="form-group">
+            <label>Field 1 Label</label>
+            <input type="text" name="field1" class="form-control"
+                   value="<c:out value='${entity.field1}'/>" required>
+        </div>
+
+        <div class="form-group">
+            <label>Field 2 Label</label>
+            <input type="text" name="field2" class="form-control"
+                   value="<c:out value='${entity.field2}'/>">
+        </div>
+
+        <!-- For INT fields use type="number" -->
+        <div class="form-group">
+            <label>Field 3 Label</label>
+            <input type="number" name="field3" class="form-control"
+                   value="<c:out value='${entity.field3}'/>">
+        </div>
+
+        <!-- For DOUBLE fields use type="number" step="0.01" -->
+        <div class="form-group">
+            <label>Field 4 Label</label>
+            <input type="number" step="0.01" name="field4" class="form-control"
+                   value="<c:out value='${entity.field4}'/>">
+        </div>
+
+        <button type="submit" class="btn btn-success">Save</button>
+        <a href="list" class="btn btn-secondary">Cancel</a>
+
+    </form>
+
+</div>
+</div>
+</div>
+
+</body>
+</html>
+```
+
+---
+
+## Quick Change Summary Card
+
+```
+NEW QUESTION COMES IN → follow this order:
+
+1. SQL        → change DB name,
