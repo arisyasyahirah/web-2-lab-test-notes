@@ -782,6 +782,586 @@ Let me check the exercises from both labs first.
 Looking at the PDFs:
 - **Lab 7 Exercise**: Subject Management System — **NO JSTL, use scriptlets**, tied to session
 - **Lab 8 Exercise**: Car Shop CRUD — **uses JSTL** (same pattern as Employee)
+
+
+
+# another lab 8
+Here's Lab 8 from scratch, step by step.
+
+---
+
+## STEP 1 — SQL (phpMyAdmin)
+
+Open phpMyAdmin → click SQL tab → run this:
+
+```sql
+CREATE DATABASE IF NOT EXISTS Company;
+USE Company;
+CREATE TABLE IF NOT EXISTS employees (
+    id       INT NOT NULL AUTO_INCREMENT,
+    Name     VARCHAR(60),
+    Email    VARCHAR(50),
+    Position VARCHAR(15),
+    PRIMARY KEY (id)
+);
+```
+
+---
+
+## STEP 2 — Create NetBeans Project
+
+```
+File → New Project
+→ Java Web → Web Application → Next
+→ Name: Lab8
+→ Next → Server: Apache Tomcat
+→ Finish
+```
+
+Then add libraries — right click `Libraries` folder:
+```
+Add JAR/Folder →
+  1. mysql-connector-j.jar
+  2. jstl-1.2.jar
+```
+
+---
+
+## STEP 3 — Create `Employee.java` (Model/Bean)
+
+```
+Right click Source Packages
+→ New → Java Package
+→ Name: com.Model → Finish
+
+Right click com.Model
+→ New → Java Class
+→ Name: Employee → Finish
+```
+
+This is just a **data container** — holds one employee's info:
+
+```java
+package com.Model;
+
+public class Employee {
+
+    // These variables match what we store in DB
+    protected int    id;
+    protected String name;
+    protected String email;
+    protected String position;
+
+    // Empty constructor — required for JavaBean
+    public Employee() {}
+
+    // Constructor WITHOUT id
+    // Used when INSERTING — DB auto generates the id
+    public Employee(String name, String email, String position) {
+        this.name     = name;
+        this.email    = email;
+        this.position = position;
+    }
+
+    // Constructor WITH id
+    // Used when UPDATING or DISPLAYING — we already know the id
+    public Employee(int id, String name, String email, String position) {
+        this.id       = id;
+        this.name     = name;
+        this.email    = email;
+        this.position = position;
+    }
+
+    // Getters and Setters
+    // JSP reads these with ${employee.id}, ${employee.name} etc
+    public int    getId()                  { return id; }
+    public void   setId(int id)            { this.id = id; }
+
+    public String getName()                { return name; }
+    public void   setName(String name)     { this.name = name; }
+
+    public String getEmail()               { return email; }
+    public void   setEmail(String email)   { this.email = email; }
+
+    public String getPosition()                { return position; }
+    public void   setPosition(String position) { this.position = position; }
+}
+```
+
+---
+
+## STEP 4 — Create `EmployeeDAO.java` (Database Logic)
+
+```
+Right click Source Packages
+→ New → Java Package
+→ Name: com.DAO → Finish
+
+Right click com.DAO
+→ New → Java Class
+→ Name: EmployeeDAO → Finish
+```
+
+DAO = **Data Access Object** — all SQL goes here, nothing else:
+
+```java
+package com.DAO;
+
+import com.Model.Employee;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class EmployeeDAO {
+
+    // Database connection details
+    private String jdbcURL      = "jdbc:mysql://localhost:3306/company";
+    private String jdbcUsername = "root";
+    private String jdbcPassword = "admin"; // change to YOUR mysql password
+
+    // SQL statements written here so they are easy to find and change
+    private static final String INSERT_SQL =
+        "INSERT INTO employees (name, email, position) VALUES (?, ?, ?)";
+
+    private static final String SELECT_BY_ID =
+        "SELECT id, name, email, position FROM employees WHERE id = ?";
+
+    private static final String SELECT_ALL =
+        "SELECT * FROM employees";
+
+    private static final String UPDATE_SQL =
+        "UPDATE employees SET name=?, email=?, position=? WHERE id=?";
+
+    private static final String DELETE_SQL =
+        "DELETE FROM employees WHERE id=?";
+
+    // Opens and returns a connection to the database
+    // Called inside every method below
+    protected Connection getConnection() {
+        Connection conn = null;
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            conn = DriverManager.getConnection(
+                       jdbcURL, jdbcUsername, jdbcPassword);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        return conn;
+    }
+
+    // CREATE — insert one employee into DB
+    public void insertEmployee(Employee employee) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement ps =
+                 conn.prepareStatement(INSERT_SQL)) {
+
+            // ? position 1 = name, 2 = email, 3 = position
+            ps.setString(1, employee.getName());
+            ps.setString(2, employee.getEmail());
+            ps.setString(3, employee.getPosition());
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // READ ONE — get single employee by id (used for edit form)
+    public Employee selectEmployee(int id) {
+        Employee employee = null;
+        try (Connection conn = getConnection();
+             PreparedStatement ps =
+                 conn.prepareStatement(SELECT_BY_ID)) {
+
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+
+            // rs.next() moves to first row
+            // if row exists, build Employee object from it
+            while (rs.next()) {
+                String name     = rs.getString("name");
+                String email    = rs.getString("email");
+                String position = rs.getString("position");
+                employee = new Employee(id, name, email, position);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return employee;
+    }
+
+    // READ ALL — get every employee (used for list page)
+    public List<Employee> selectAllEmployees() {
+        List<Employee> employees = new ArrayList<>();
+        try (Connection conn = getConnection();
+             PreparedStatement ps =
+                 conn.prepareStatement(SELECT_ALL)) {
+
+            ResultSet rs = ps.executeQuery();
+
+            // Each row becomes one Employee object added to list
+            while (rs.next()) {
+                int    id       = rs.getInt("id");
+                String name     = rs.getString("name");
+                String email    = rs.getString("email");
+                String position = rs.getString("position");
+                employees.add(new Employee(id, name, email, position));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return employees;
+    }
+
+    // UPDATE — change existing employee's details
+    public boolean updateEmployee(Employee employee) throws SQLException {
+        boolean rowUpdated;
+        try (Connection conn = getConnection();
+             PreparedStatement ps =
+                 conn.prepareStatement(UPDATE_SQL)) {
+
+            // ? position 1=name, 2=email, 3=position, 4=id (WHERE clause)
+            ps.setString(1, employee.getName());
+            ps.setString(2, employee.getEmail());
+            ps.setString(3, employee.getPosition());
+            ps.setInt(4,    employee.getId());
+            rowUpdated = ps.executeUpdate() > 0;
+        }
+        return rowUpdated;
+    }
+
+    // DELETE — remove employee by id
+    public boolean deleteEmployee(int id) throws SQLException {
+        boolean rowDeleted;
+        try (Connection conn = getConnection();
+             PreparedStatement ps =
+                 conn.prepareStatement(DELETE_SQL)) {
+
+            ps.setInt(1, id);
+            rowDeleted = ps.executeUpdate() > 0;
+        }
+        return rowDeleted;
+    }
+}
+```
+
+---
+
+## STEP 5 — Create `EmployeeServlet.java` (Controller)
+
+This is the important part you asked about — creating servlet with web.xml:
+
+```
+Right click Source Packages
+→ New → Java Package
+→ Name: com.WEB → Finish
+
+Right click com.WEB
+→ New → Servlet
+→ Name: EmployeeServlet → Next
+```
+
+You will see this screen — do this exactly:
+
+```
+Class Name : EmployeeServlet
+Package    : com.WEB
+→ Next
+
+☑ TICK "Add information to deployment descriptor (web.xml)"
+
+URL Pattern box — CHANGE it from /EmployeeServlet to just:
+/
+
+→ Finish
+```
+
+Now NetBeans auto-generates the class. You will see `@WebServlet` annotation at the top — **DELETE IT** because we are using web.xml instead:
+
+```java
+// DELETE THIS LINE that NetBeans generated:
+// @WebServlet(name = "EmployeeServlet", urlPatterns = {"/EmployeeServlet"})
+```
+
+Your final `EmployeeServlet.java` should look like this:
+
+```java
+package com.WEB;
+
+import com.DAO.EmployeeDAO;
+import com.Model.Employee;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+// NO @WebServlet annotation here — mapping is in web.xml instead
+public class EmployeeServlet extends HttpServlet {
+
+    private EmployeeDAO employeeDAO;
+
+    // init() runs ONCE when server starts
+    // creates the DAO so it's ready to use
+    @Override
+    public void init() {
+        employeeDAO = new EmployeeDAO();
+    }
+
+    // ALL post requests go to doGet
+    // this means we handle everything in one place
+    @Override
+    protected void doPost(HttpServletRequest request,
+                          HttpServletResponse response)
+            throws ServletException, IOException {
+        doGet(request, response);
+    }
+
+    // MAIN METHOD — reads URL path, decides what to do
+    @Override
+    protected void doGet(HttpServletRequest request,
+                         HttpServletResponse response)
+            throws ServletException, IOException {
+
+        // getServletPath() reads the URL after project name
+        // e.g. localhost:8080/Lab8/new    → action = "/new"
+        // e.g. localhost:8080/Lab8/delete → action = "/delete"
+        String action = request.getServletPath();
+
+        try {
+            switch (action) {
+                case "/new":
+                    showNewForm(request, response);
+                    break;
+                case "/insert":
+                    insertEmployee(request, response);
+                    break;
+                case "/edit":
+                    showEditForm(request, response);
+                    break;
+                case "/update":
+                    updateEmployee(request, response);
+                    break;
+                case "/delete":
+                    deleteEmployee(request, response);
+                    break;
+                default:
+                    // /list and anything else → show the list
+                    listEmployee(request, response);
+                    break;
+            }
+        } catch (SQLException ex) {
+            throw new ServletException(ex);
+        }
+    }
+
+    // READ ALL
+    // Gets all employees from DB, puts in request, forwards to list JSP
+    private void listEmployee(HttpServletRequest request,
+                               HttpServletResponse response)
+            throws SQLException, IOException, ServletException {
+
+        List<Employee> listEmployee = employeeDAO.selectAllEmployees();
+
+        // setAttribute = pass data to JSP
+        // JSP accesses this with ${listEmployee}
+        request.setAttribute("listEmployee", listEmployee);
+
+        RequestDispatcher dispatcher =
+            request.getRequestDispatcher("employeeList.jsp");
+        dispatcher.forward(request, response);
+    }
+
+    // SHOW ADD FORM
+    // Just forwards to form JSP — no employee attribute set
+    // JSP checks: employee == null → shows "Add New Employee"
+    private void showNewForm(HttpServletRequest request,
+                              HttpServletResponse response)
+            throws ServletException, IOException {
+
+        RequestDispatcher dispatcher =
+            request.getRequestDispatcher("employeeForm.jsp");
+        dispatcher.forward(request, response);
+    }
+
+    // SHOW EDIT FORM
+    // Gets employee by id, puts in request, forwards to same form JSP
+    // JSP checks: employee != null → shows "Edit Employee" pre-filled
+    private void showEditForm(HttpServletRequest request,
+                               HttpServletResponse response)
+            throws SQLException, ServletException, IOException {
+
+        // Read ?id=2 from the URL
+        int id = Integer.parseInt(request.getParameter("id"));
+
+        Employee existingEmployee = employeeDAO.selectEmployee(id);
+
+        // setAttribute = pass employee object to JSP
+        // JSP accesses this with ${employee.name} etc
+        request.setAttribute("employee", existingEmployee);
+
+        RequestDispatcher dispatcher =
+            request.getRequestDispatcher("employeeForm.jsp");
+        dispatcher.forward(request, response);
+    }
+
+    // INSERT (Create)
+    // Reads form fields, builds Employee, inserts, redirects to list
+    private void insertEmployee(HttpServletRequest request,
+                                 HttpServletResponse response)
+            throws SQLException, IOException {
+
+        // getParameter reads what user typed in form fields
+        String name     = request.getParameter("name");
+        String email    = request.getParameter("email");
+        String position = request.getParameter("position");
+
+        // No id needed — DB auto generates it
+        Employee newEmployee = new Employee(name, email, position);
+        employeeDAO.insertEmployee(newEmployee);
+
+        // sendRedirect sends user BACK to list page after insert
+        response.sendRedirect("list");
+    }
+
+    // UPDATE
+    // Reads form fields INCLUDING hidden id, updates, redirects to list
+    private void updateEmployee(HttpServletRequest request,
+                                 HttpServletResponse response)
+            throws SQLException, IOException {
+
+        // id comes from hidden input in the form
+        int    id       = Integer.parseInt(request.getParameter("id"));
+        String name     = request.getParameter("name");
+        String email    = request.getParameter("email");
+        String position = request.getParameter("position");
+
+        // Need id this time so DB knows WHICH row to update
+        Employee employee = new Employee(id, name, email, position);
+        employeeDAO.updateEmployee(employee);
+
+        response.sendRedirect("list");
+    }
+
+    // DELETE
+    // Reads id from URL, deletes that row, redirects to list
+    private void deleteEmployee(HttpServletRequest request,
+                                 HttpServletResponse response)
+            throws SQLException, IOException {
+
+        // id comes from ?id=2 in the URL link
+        int id = Integer.parseInt(request.getParameter("id"));
+        employeeDAO.deleteEmployee(id);
+
+        response.sendRedirect("list");
+    }
+}
+```
+
+---
+
+## STEP 6 — Check `web.xml`
+
+Because you ticked the web.xml box when creating the servlet, NetBeans auto-added this. Open `WEB-INF > web.xml` and verify it looks like this — also add the static file mappings:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+         version="3.1">
+
+    <!-- Auto-generated by NetBeans when you ticked the web.xml box -->
+    <servlet>
+        <servlet-name>EmployeeServlet</servlet-name>
+        <servlet-class>com.WEB.EmployeeServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>EmployeeServlet</servlet-name>
+        <url-pattern>/</url-pattern>  <!-- handles ALL URLs -->
+    </servlet-mapping>
+
+    <!-- ADD THESE — fixes CSS/JS/images breaking when / catches everything -->
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>*.css</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>*.js</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>*.png</url-pattern>
+    </servlet-mapping>
+
+</web-app>
+```
+
+---
+
+## STEP 7 — Create JSP Views
+
+```
+Right click Web Pages
+→ New → JSP
+→ Name: employeeList → Finish
+(repeat for employeeForm, error, index)
+```
+
+All 4 files already given in the previous response — copy them in exactly as they are.
+
+---
+
+## Full Flow Visual
+
+```
+Browser hits /list
+      ↓
+EmployeeServlet.doGet()
+      ↓
+action = "/list" → default case
+      ↓
+listEmployee() → DAO.selectAllEmployees()
+      ↓
+request.setAttribute("listEmployee", list)
+      ↓
+forward → employeeList.jsp
+      ↓
+JSTL <c:forEach> loops ${listEmployee} → shows table
+
+
+User clicks Edit link (edit?id=2)
+      ↓
+EmployeeServlet.doGet()
+      ↓
+action = "/edit"
+      ↓
+showEditForm() → DAO.selectEmployee(2)
+      ↓
+request.setAttribute("employee", emp)
+      ↓
+forward → employeeForm.jsp
+      ↓
+JSTL <c:if test="${employee != null}"> → shows Edit form pre-filled
+      ↓
+User submits → POST /update
+      ↓
+updateEmployee() → DAO.updateEmployee()
+      ↓
+sendRedirect("list")
+```
+
+The key thing to remember is **web.xml maps `/` to EmployeeServlet**, so every URL goes through `doGet()`, and `getServletPath()` reads which part of the URL was typed to decide which private method to call.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
